@@ -33,7 +33,7 @@ export default function Home() {
       </nav>
 
       {/* Hero */}
-      <section className="max-w-5xl mx-auto px-6 pt-24 pb-20">
+      <section id="signup" className="max-w-5xl mx-auto px-6 pt-24 pb-20">
         <div className="inline-flex items-center gap-2 text-xs text-emerald-400/80 border border-emerald-400/20 rounded-full px-3 py-1 mb-8">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
           Now in private beta
@@ -49,7 +49,7 @@ export default function Home() {
         </p>
 
         {/* Email capture */}
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md" id="signup">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md">
           {submitted ? (
             <div className="flex items-center gap-2 text-emerald-400 text-sm">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
