@@ -201,41 +201,18 @@ export default function Home() {
       <section className="max-w-5xl mx-auto px-6 py-24 border-t border-white/5 text-center">
         <h2 className="text-3xl font-bold mb-4">Ready to give your team shared AI memory?</h2>
         <p className="text-white/40 mb-10 text-sm">Private beta. Free to start. No credit card.</p>
-        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
-          {submitted ? (
-            <div className="flex items-center justify-center gap-2 text-emerald-400 text-sm w-full">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              You&apos;re on the list. We&apos;ll be in touch.
-            </div>
-          ) : (
-            <>
-              <input
-                type="email"
-                required
-                placeholder="you@company.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="flex-1 bg-white/5 border border-white/10 rounded px-4 py-3 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/30 transition-colors"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="bg-white text-black text-sm font-semibold px-6 py-3 rounded hover:bg-white/90 transition-colors disabled:opacity-50 whitespace-nowrap"
-              >
-                {loading ? "..." : "Get Early Access"}
-              </button>
-            </>
-          )}
-        </form>
+        <a
+          href="#signup"
+          className="inline-block bg-white text-black text-sm font-semibold px-8 py-3 rounded hover:bg-white/90 transition-colors"
+        >
+          Request Early Access →
+        </a>
       </section>
 
       {/* Footer */}
       <footer className="border-t border-white/5 px-6 py-8 max-w-5xl mx-auto flex items-center justify-between text-xs text-white/20">
         <span>⬡ Stateful — shared AI memory for engineering teams</span>
         <div className="flex gap-6">
-          <a href="https://github.com/MrAbh1/stateful" className="hover:text-white/50 transition-colors">GitHub</a>
           <a href="mailto:arrian@stateful.dev" className="hover:text-white/50 transition-colors">Contact</a>
         </div>
       </footer>
