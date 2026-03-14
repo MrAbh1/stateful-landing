@@ -274,6 +274,44 @@ function TerminalDemo() {
   );
 }
 
+function MarqueeTrack() {
+  const ref = useRef<HTMLDivElement>(null);
+  const pos = useRef(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const halfWidth = el.scrollWidth / 2;
+    let rafId: number;
+    const tick = () => {
+      pos.current += 0.6;
+      if (pos.current >= halfWidth) pos.current -= halfWidth;
+      el.style.transform = `translateX(-${pos.current}px)`;
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, []);
+
+  return (
+    <div ref={ref} className="flex w-max">
+      {[...Array(2)].flatMap((_, dupe) =>
+        TOOLS.map((tool) => (
+          <span
+            key={`${dupe}-${tool.name}`}
+            className="inline-flex items-center gap-2.5 mx-2 text-sm px-5 py-3 border border-white/10 rounded-lg text-white/45 bg-white/[0.02] shrink-0"
+          >
+            <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0 fill-current opacity-60" aria-hidden>
+              <path d={tool.svg} />
+            </svg>
+            {tool.name}
+          </span>
+        ))
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -445,21 +483,7 @@ export default function Home() {
           <div className="relative overflow-hidden">
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10 bg-gradient-to-l from-[#0a0a0a] to-transparent" />
-            <div className="flex animate-marquee whitespace-nowrap">
-              {[...Array(2)].flatMap((_, dupe) =>
-                TOOLS.map((tool) => (
-                  <span
-                    key={`${dupe}-${tool.name}`}
-                    className="inline-flex items-center gap-2.5 mx-2 text-sm px-5 py-3 border border-white/10 rounded-lg text-white/45 bg-white/[0.02] shrink-0"
-                  >
-                    <svg viewBox="0 0 24 24" className="w-4 h-4 shrink-0 fill-current opacity-60" aria-hidden>
-                      <path d={tool.svg} />
-                    </svg>
-                    {tool.name}
-                  </span>
-                ))
-              )}
-            </div>
+            <MarqueeTrack />
           </div>
         </div>
       </section>
