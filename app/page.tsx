@@ -1,6 +1,263 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+
+const SCENARIOS = [
+  {
+    id: "dead-ends",
+    label: "Repeat investigation",
+    ticket: "Service failure in checkout flow",
+    without: [
+      { text: "→ Checking error logs...", type: "try" },
+      { text: "→ Scaling up instances...  ✗  still failing", type: "fail" },
+      { text: "→ Increasing request timeout...  ✗  no change", type: "fail" },
+      { text: "→ Restarting the service...  ✗  failure persists", type: "fail" },
+      { text: "→ Scaling up instances again (higher)...  ✗", type: "fail" },
+      { text: "→ Re-reading the same docs as last time...", type: "try" },
+      { text: "↳  1hr 20min elapsed", type: "time" },
+    ],
+    withStateful: [
+      { text: "TEAM MEMORY  ·  3 prior sessions", type: "header" },
+      { text: "✗  Dead end: scaling + timeouts — team ruled this out twice", type: "dead" },
+      { text: "✓  Root cause: upstream rate limit on third-party API", type: "fix" },
+      { text: "↳  @teammate resolved this 3 weeks ago", type: "lineage" },
+    ],
+  },
+  {
+    id: "similar-pattern",
+    label: "Similar problem",
+    ticket: "New service timing out under load",
+    without: [
+      { text: "→ Checking server capacity...  CPU/memory look fine", type: "try" },
+      { text: "→ Adding more instances...  ✗  still timing out", type: "fail" },
+      { text: "→ Increasing memory limits...  ✗  no change", type: "fail" },
+      { text: "→ Tweaking load balancer config...  ✗  no effect", type: "fail" },
+      { text: "→ Adding even more instances...  ✗  same result", type: "fail" },
+      { text: '→ Opening infra ticket: "need more capacity"', type: "try" },
+      { text: "↳  2hrs 45min elapsed", type: "time" },
+    ],
+    withStateful: [
+      { text: "⚠  Similar pattern seen across 2 other services", type: "warn" },
+      { text: "✗  Not a capacity issue — your team already proved this", type: "dead" },
+      { text: "✓  Root cause: connection pool exhaustion, not load", type: "fix" },
+      { text: "↳  Two other services, same fix, last quarter", type: "lineage" },
+    ],
+  },
+  {
+    id: "new-engineer",
+    label: "Known dead end",
+    ticket: "New hire fixing flaky test suite",
+    without: [
+      { text: "→ Running test suite...  ✗  8 failures", type: "fail" },
+      { text: "→ Adding retry logic...  ✗  still 8 failures", type: "fail" },
+      { text: "→ Increasing test timeouts...  ✗  8 failures", type: "fail" },
+      { text: "→ Adding more retries...  ✗  still 8 failures", type: "fail" },
+      { text: "→ Increasing timeouts further...  ✗  8 failures", type: "fail" },
+      { text: '→ "Why isn\'t retry logic working??"', type: "try" },
+      { text: "↳  Day 2:  still 8 failures", type: "time" },
+    ],
+    withStateful: [
+      { text: "⚠  Known dead end — 3 sessions confirm this", type: "warn" },
+      { text: "✗  Retries/timeouts don't fix this class of failure", type: "dead" },
+      { text: "✓  Root cause: race condition in test teardown", type: "fix" },
+      { text: "↳  Senior engineer documented the exact fix last sprint", type: "lineage" },
+    ],
+  },
+];
+
+// Typing constants
+const L_CHAR = 22;   // ms per char, left (slow/painful)
+const L_GAP  = 260;  // ms pause between left lines
+const R_CHAR = 14;   // ms per char, right (fast/confident)
+const R_GAP  = 160;  // ms pause between right lines
+const RIGHT_AFTER_LEFT_LINES = 2; // right starts after this many left lines finish
+const HOLD   = 3200; // ms to hold after left finishes before cycling
+
+type Line = { text: string; type: string };
+
+// Build { time, chars } schedule for a list of lines typed char-by-char
+function buildSchedule(lines: Line[], charMs: number, gapMs: number, startMs: number) {
+  const events: { time: number; chars: number }[] = [];
+  let t = startMs;
+  let total = 0;
+  lines.forEach((line, idx) => {
+    for (let c = 1; c <= line.text.length; c++) {
+      t += charMs;
+      events.push({ time: t, chars: total + c });
+    }
+    total += line.text.length;
+    if (idx < lines.length - 1) t += gapMs;
+  });
+  return events;
+}
+
+// Convert flat char count → array of { ...line, visible: string }
+function renderLines(lines: Line[], totalChars: number) {
+  let rem = totalChars;
+  return lines.map((line) => {
+    const shown = Math.min(Math.max(rem, 0), line.text.length);
+    rem -= line.text.length;
+    return { ...line, visible: line.text.slice(0, shown) };
+  });
+}
+
+function TerminalDemo() {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [leftChars, setLeftChars]   = useState(0);
+  const [rightChars, setRightChars] = useState(0);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  const scenario = SCENARIOS[activeIdx];
+
+  useEffect(() => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+    setLeftChars(0);
+    setRightChars(0);
+
+    // Left schedule (starts at t=0)
+    const leftSched = buildSchedule(scenario.without, L_CHAR, L_GAP, 0);
+    leftSched.forEach(({ time, chars }) =>
+      timers.current.push(setTimeout(() => setLeftChars(chars), time))
+    );
+
+    // Compute when left finishes its Nth line → that's when right starts
+    let rightStart = 0;
+    {
+      let t = 0;
+      let n = Math.min(RIGHT_AFTER_LEFT_LINES, scenario.without.length);
+      for (let i = 0; i < n; i++) {
+        t += scenario.without[i].text.length * L_CHAR;
+        if (i < n - 1) t += L_GAP;
+      }
+      rightStart = t + L_GAP; // small extra beat before right appears
+    }
+
+    // Right schedule
+    const rightSched = buildSchedule(scenario.withStateful, R_CHAR, R_GAP, rightStart);
+    rightSched.forEach(({ time, chars }) =>
+      timers.current.push(setTimeout(() => setRightChars(chars), time))
+    );
+
+    // Cycle to next scenario after left finishes + hold
+    const leftEnd = leftSched[leftSched.length - 1]?.time ?? 0;
+    timers.current.push(
+      setTimeout(
+        () => setActiveIdx((i) => (i + 1) % SCENARIOS.length),
+        leftEnd + HOLD
+      )
+    );
+
+    return () => {
+      timers.current.forEach(clearTimeout);
+      timers.current = [];
+    };
+  }, [activeIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const leftRendered  = renderLines(scenario.without, leftChars);
+  const rightRendered = renderLines(scenario.withStateful, rightChars);
+  const leftDone  = leftChars  >= scenario.without.reduce((s, l) => s + l.text.length, 0);
+  const rightDone = rightChars >= scenario.withStateful.reduce((s, l) => s + l.text.length, 0);
+
+  return (
+    <div>
+      {/* Scenario tabs */}
+      <div className="flex gap-2 mb-4">
+        {SCENARIOS.map((s, i) => (
+          <button
+            key={s.id}
+            onClick={() => setActiveIdx(i)}
+            className={`text-xs px-3 py-1.5 rounded border transition-all ${
+              i === activeIdx
+                ? "border-white/30 text-white/70 bg-white/5"
+                : "border-white/10 text-white/25 hover:border-white/20 hover:text-white/40"
+            }`}
+          >
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Two-panel terminal */}
+      <div className="grid grid-cols-2 rounded-lg border border-white/10 overflow-hidden">
+        {/* Left — without Stateful */}
+        <div className="bg-white/[0.015] border-r border-white/10">
+          <div className="flex items-center gap-1.5 px-4 py-3 border-b border-white/10">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-white/10" />
+            <span className="ml-2 text-xs text-white/20">without stateful</span>
+          </div>
+          <div className="p-5 text-xs leading-[1.8] min-h-[240px] font-mono">
+            <div className="text-white/35 mb-3">$ {scenario.ticket}</div>
+            {leftRendered.map((line, i) =>
+              line.visible.length === 0 ? null : (
+                <div
+                  key={i}
+                  className={
+                    line.type === "fail"
+                      ? "text-red-400/50"
+                      : line.type === "time"
+                      ? "text-yellow-500/40 mt-2"
+                      : "text-white/25"
+                  }
+                >
+                  {line.visible}
+                  {/* cursor on the line currently being typed */}
+                  {i === leftRendered.filter((l) => l.visible.length > 0).length - 1 &&
+                    !leftDone && (
+                      <span className="animate-pulse text-white/20">▊</span>
+                    )}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Right — with Stateful */}
+        <div className="bg-white/[0.03]">
+          <div className="flex items-center gap-1.5 px-4 py-3 border-b border-white/10">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/60" />
+            <span className="ml-2 text-xs text-emerald-400/50">⬡ with stateful</span>
+          </div>
+          <div className="p-5 text-xs leading-[1.8] min-h-[240px] font-mono">
+            <div className="text-white/35 mb-3">$ {scenario.ticket}</div>
+            {rightChars === 0 ? (
+              <span className="text-white/10 animate-pulse">loading context...</span>
+            ) : (
+              rightRendered.map((line, i) =>
+                line.visible.length === 0 ? null : (
+                  <div
+                    key={i}
+                    className={
+                      line.type === "header"
+                        ? "text-white/20 uppercase tracking-widest text-[10px] mb-2"
+                        : line.type === "warn"
+                        ? "text-yellow-400/60"
+                        : line.type === "dead"
+                        ? "text-white/30"
+                        : line.type === "fix"
+                        ? "text-emerald-400"
+                        : "text-white/25 mt-1"
+                    }
+                  >
+                    {line.visible}
+                    {i === rightRendered.filter((l) => l.visible.length > 0).length - 1 &&
+                      !rightDone && (
+                        <span className="animate-pulse text-emerald-400/30">▊</span>
+                      )}
+                  </div>
+                )
+              )
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const [email, setEmail] = useState("");
@@ -81,25 +338,7 @@ export default function Home() {
 
       {/* Terminal demo */}
       <section className="max-w-5xl mx-auto px-6 pb-24">
-        <div className="rounded-lg border border-white/10 bg-white/[0.03] overflow-hidden">
-          <div className="flex items-center gap-1.5 px-4 py-3 border-b border-white/10">
-            <span className="w-3 h-3 rounded-full bg-red-500/60" />
-            <span className="w-3 h-3 rounded-full bg-yellow-500/60" />
-            <span className="w-3 h-3 rounded-full bg-emerald-500/60" />
-            <span className="ml-3 text-xs text-white/30">claude — stateful warm start</span>
-          </div>
-          <div className="p-6 text-sm leading-7 overflow-x-auto">
-            <div className="text-white/30">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
-            <div className="text-emerald-400">  ⬡ STATEFUL  ·  Fix JWT clock skew  ·  3 prior sessions</div>
-            <div className="text-white/30">━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━</div>
-            <div className="mt-4 text-white/20 text-xs uppercase tracking-widest mb-2">Prior session memory loaded</div>
-            <div className="text-white/60">
-              <span className="text-white/30">✗ Tried: </span>Increasing token TTL in Redis — did not fix root cause<br />
-              <span className="text-emerald-400">✓ Fixed: </span>Set <span className="text-amber-400">clock_skew_leeway=10</span> in <span className="text-sky-400">auth/config.py:jwt.decode()</span><br />
-              <span className="text-white/30">↳ </span>Same bug hit by @alice 3 weeks ago on payments-service
-            </div>
-          </div>
-        </div>
+        <TerminalDemo />
       </section>
 
       {/* Problem */}
@@ -116,9 +355,9 @@ export default function Home() {
           </div>
           <div className="flex flex-col gap-4">
             {[
-              { bad: "Agent spends 40 min debugging JWT expiry", good: "Stateful surfaces the fix in the first response" },
-              { bad: "New engineer's agent repeats a known dead end", good: "Memory flags it: ✗ tried, didn't work" },
-              { bad: "Team knowledge lives in Slack threads no one reads", good: "Captured automatically from every coding session" },
+              { bad: "Agent spends an hour on an approach your team already ruled out", good: "Memory flags it before the first command runs" },
+              { bad: "New engineer's agent circles the same dead end for days", good: "Past failures become instant guardrails for every agent" },
+              { bad: "Every session starts from zero, even for known fixes", good: "Solutions accumulate — each session makes the next one faster" },
             ].map((item, i) => (
               <div key={i} className="flex flex-col gap-1 text-sm">
                 <div className="flex items-start gap-2 text-white/30">
@@ -168,9 +407,9 @@ export default function Home() {
         <p className="text-xs text-white/30 uppercase tracking-widest mb-12">Benchmark results</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
           {[
-            { value: "100%", label: "Warm insight rate", sub: "7 of 7 scenarios" },
-            { value: "+0.32", label: "Avg score delta", sub: "cold 0.66 → warm 0.98" },
-            { value: "43%", label: "Cold insight rate", sub: "without Stateful" },
+            { value: "100%", label: "Warm insight rate", sub: "18 of 18 scenarios" },
+            { value: "+0.40", label: "Avg score delta", sub: "cold 0.58 → warm 0.98" },
+            { value: "28%", label: "Cold insight rate", sub: "without Stateful" },
             { value: "5 min", label: "Setup time", sub: "one install command" },
           ].map((stat) => (
             <div key={stat.label} className="flex flex-col gap-1">
@@ -182,18 +421,45 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Integrations */}
-      <section className="max-w-5xl mx-auto px-6 py-20 border-t border-white/5">
-        <p className="text-xs text-white/30 uppercase tracking-widest mb-8">Works with your stack</p>
-        <div className="flex flex-wrap gap-3">
-          {["Claude Code", "Cursor", "Windsurf", "GitHub PRs", "Slack", "Linear", "Jira", "Confluence"].map((tool) => (
-            <span
-              key={tool}
-              className="text-xs px-3 py-1.5 border border-white/10 rounded text-white/40 bg-white/[0.02]"
-            >
-              {tool}
-            </span>
-          ))}
+      {/* Integrations carousel */}
+      <section className="py-20 border-t border-white/5">
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-8 max-w-5xl mx-auto px-6">Works with your stack</p>
+        <div className="max-w-5xl mx-auto px-6">
+          <div className="relative overflow-hidden">
+            <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10 bg-gradient-to-l from-[#0a0a0a] to-transparent" />
+            <div className="flex animate-marquee whitespace-nowrap">
+              {[...Array(3)].flatMap((_, dupe) =>
+                [
+                  { name: "Claude Code",  icon: "anthropic" },
+                  { name: "Cursor",       icon: "cursor" },
+                  { name: "Windsurf",     icon: "windsurf" },
+                  { name: "GitHub PRs",   icon: "github" },
+                  { name: "Slack",        icon: "slack" },
+                  { name: "Linear",       icon: "linear" },
+                  { name: "Jira",         icon: "jira" },
+                  { name: "Confluence",   icon: "confluence" },
+                  { name: "VS Code",      icon: "visualstudiocode" },
+                  { name: "Notion",       icon: "notion" },
+                  { name: "Datadog",      icon: "datadog" },
+                  { name: "PagerDuty",    icon: "pagerduty" },
+                ].map((tool) => (
+                  <span
+                    key={`${dupe}-${tool.name}`}
+                    className="inline-flex items-center gap-2.5 mx-2 text-sm px-5 py-3 border border-white/10 rounded-lg text-white/45 bg-white/[0.02] shrink-0"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={`https://cdn.simpleicons.org/${tool.icon}/666666`}
+                      alt=""
+                      className="w-4 h-4 opacity-70"
+                    />
+                    {tool.name}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
