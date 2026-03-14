@@ -446,7 +446,7 @@ export default function Home() {
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
             <div className="pointer-events-none absolute inset-y-0 right-0 w-16 z-10 bg-gradient-to-l from-[#0a0a0a] to-transparent" />
             <div className="flex animate-marquee whitespace-nowrap">
-              {[...Array(3)].flatMap((_, dupe) =>
+              {[...Array(2)].flatMap((_, dupe) =>
                 TOOLS.map((tool) => (
                   <span
                     key={`${dupe}-${tool.name}`}
