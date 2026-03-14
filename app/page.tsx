@@ -343,7 +343,7 @@ export default function Home() {
 
       {/* Problem */}
       <section className="max-w-5xl mx-auto px-6 py-20 border-t border-white/5">
-        <p className="text-xs text-white/30 uppercase tracking-widest mb-6">The problem</p>
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-6 text-center">The problem</p>
         <div className="grid sm:grid-cols-2 gap-12">
           <div>
             <h2 className="text-2xl font-bold mb-4 text-white/90">
@@ -374,7 +374,7 @@ export default function Home() {
 
       {/* How it works */}
       <section className="max-w-5xl mx-auto px-6 py-20 border-t border-white/5">
-        <p className="text-xs text-white/30 uppercase tracking-widest mb-12">How it works</p>
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-12 text-center">How it works</p>
         <div className="grid sm:grid-cols-3 gap-8">
           {[
             {
@@ -404,7 +404,7 @@ export default function Home() {
 
       {/* Stats */}
       <section className="max-w-5xl mx-auto px-6 py-20 border-t border-white/5">
-        <p className="text-xs text-white/30 uppercase tracking-widest mb-12">Benchmark results</p>
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-12 text-center">Benchmark results</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-8">
           {[
             { value: "100%", label: "Warm insight rate", sub: "18 of 18 scenarios" },
@@ -423,7 +423,7 @@ export default function Home() {
 
       {/* Integrations carousel */}
       <section className="py-20 border-t border-white/5">
-        <p className="text-xs text-white/30 uppercase tracking-widest mb-8 max-w-5xl mx-auto px-6">Works with your stack</p>
+        <p className="text-xs text-white/30 uppercase tracking-widest mb-8 max-w-5xl mx-auto px-6 text-center">Works with your stack</p>
         <div className="max-w-5xl mx-auto px-6">
           <div className="relative overflow-hidden">
             <div className="pointer-events-none absolute inset-y-0 left-0 w-16 z-10 bg-gradient-to-r from-[#0a0a0a] to-transparent" />
